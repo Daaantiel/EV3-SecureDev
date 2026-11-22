@@ -1,0 +1,13 @@
+.venv/
+.vscode/
+__MACOSX/
+__pycache__/
+*.pyc
+*.db
+*.db-shm
+*.db-wal
+.flask_secret
+.env
+.env.*
+.DS_Store
+.pytest_cache/
