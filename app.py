@@ -1,4 +1,3 @@
-
 from flask import Flask, request, render_template_string, redirect, session
 from flask_wtf.csrf import CSRFProtect
 from werkzeug.security import check_password_hash
@@ -9,7 +8,6 @@ import secrets
 import os
 
 app = Flask(__name__)
-
 # --- CONFIGURACIÓN SEGURA ---
 BASE_DIR = Path(__file__).resolve().parent
 SECRET_FILE = BASE_DIR / ".flask_secret"
@@ -21,14 +19,27 @@ app.config["SECRET_KEY"] = (
     os.environ.get("FLASK_SECRET_KEY")
     or SECRET_FILE.read_text(encoding="utf-8").strip()
 )
-
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = False  # Solo HTTP local
+app.config["SESSION_COOKIE_SECURE"] = False  # Solo HTTP local; True al usar HTTPS
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
 
 csrf = CSRFProtect(app)
 
+# --- ENCABEZADOS HTTP DE SEGURIDAD (MITIGACIONES OWASP ZAP) ---
+@app.after_request
+def agregar_encabezados_seguridad(response):
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; object-src 'none'; "
+        "base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    )
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), camera=(), microphone=()"
+    )
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    return response
 
 # --- BASE DE DATOS: SQL INJECTION MITIGADA ---
 def db_query(query, params=()):
@@ -44,7 +55,6 @@ def db_query(query, params=()):
     finally:
         conn.close()
 
-
 # --- LOGIN: SQL INJECTION Y CONTRASEÑAS PROTEGIDAS ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -56,7 +66,6 @@ def login():
             "SELECT id, username, password FROM usuarios WHERE username = ?",
             (user,)
         )
-
         if usuarios and check_password_hash(usuarios[0]["password"], pw):
             session.clear()
             session.permanent = True
@@ -72,7 +81,6 @@ def login():
         <input type="hidden"
                name="csrf_token"
                value="{{ csrf_token() }}">
-
         Usuario:
         <input type="text" name="username"><br>
 
@@ -84,7 +92,6 @@ def login():
     """
 
     return render_template_string(html)
-
 
 # --- DASHBOARD: XSS MITIGADA ---
 @app.route("/dashboard")
@@ -105,7 +112,6 @@ def dashboard():
 
     html = """
     <h1>Panel de {{ datos['username'] }}</h1>
-
     <p><b>Rol:</b> {{ datos['rol'] }}</p>
     <p><b>Biografía:</b> {{ datos['bio'] }}</p>
 
@@ -126,7 +132,6 @@ def dashboard():
     </form>
 
     <br>
-
     <form action="/logout" method="POST">
         <input type="hidden"
                name="csrf_token"
@@ -137,7 +142,6 @@ def dashboard():
     """
 
     return render_template_string(html, datos=datos[0])
-
 
 # --- ACTUALIZAR BIOGRAFÍA: CSRF Y SQLI MITIGADAS ---
 @app.route("/update_bio", methods=["POST"])
@@ -156,19 +160,16 @@ def update_bio():
 
     return redirect("/dashboard")
 
-
 # --- CERRAR SESIÓN ---
 @app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect("/login")
 
-
 # --- PÁGINA PRINCIPAL ---
 @app.route("/")
 def home():
     return redirect("/login")
-
 
 if __name__ == "__main__":
     # Depurador desactivado
